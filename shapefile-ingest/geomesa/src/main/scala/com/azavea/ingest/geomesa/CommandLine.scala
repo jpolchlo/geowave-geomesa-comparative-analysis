@@ -1,5 +1,7 @@
 package com.azavea.ingest.geomesa
 
+import java.io.File
+
 import com.azavea.ingest.common._
 
 object CommandLine {
@@ -43,6 +45,28 @@ object CommandLine {
         note("")
       )
 
+    note("Transformation options:\n")
+
+    opt[Boolean]("translate")
+      .action( (b, conf) => conf.copy(translate = b) )
+      .text("Replicate data set via translation [default=false]")
+    opt[String]("origin")
+      .action( (s, conf) => {
+        val arr = s.split(",").map(_.toDouble)
+        if (arr.size != 2) {
+          throw new IllegalArgumentException("Origin must have two, comma-separated values")
+        }
+        conf.copy(origin = arr)
+      })
+      .text("Location of center of data set [default=0,0]")
+    opt[Int]("replicates")
+      .action( (i, conf) => conf.copy(numReplicates = i) )
+      .text("Number of replicates to generate")
+    opt[String]("centers")
+      .action( (f, conf) => conf.copy(centerFile = f) )
+      .text("File containing list of tab-delimited target centers (long/lat)")
+    note("")
+
     note("Global options:\n")
 
     opt[String]('i',"instance")
@@ -73,8 +97,8 @@ object CommandLine {
       .text("Directory in S3 bucket containing target files")
 
     note("""
-Codecs are defined as comma-separated list of `key=value' pairs.  A value may
-take one of several forms:
+CSV codecs are defined as comma-separated list of `key=value' pairs.  A value 
+may take one of several forms:
     (1) `$n', where n gives the column number of the desired field (n >= 1),
         resulting in a string value.
     (2) `f(args)', where f is a function name and args are a comma-separated

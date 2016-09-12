@@ -128,3 +128,24 @@ ${ASSEMBLY_URI} csv \
 --codec 'the_geom=point($$2,$$1),height=$$4,timestamp=date({yyyy-MM-ddHH:mm:ss},concat($$6,$$7))' \
 --featurename trajectory \
 geotrellis-sample-datasets geolife/000/Trajectory/
+
+transform-test-gm: ASSEMBLY_URI=$(shell ./stage-assembly.sh ../shapefile-ingest geomesa ${S3_URI}/jars)
+transform-test-gm:
+	@if [ -z "${ASSEMBLY_URI}" ]; then echo "Assembly failed" && exit 1; fi
+	./add-steps.sh ${GEOMESA_CLUSTER_ID} "Transform CSV" \
+spark-submit --master yarn --deploy-mode cluster \
+--driver-memory ${DRIVER_MEMORY} \
+--driver-cores ${DRIVER_CORES} \
+--executor-memory ${EXECUTOR_MEMORY} \
+--executor-cores ${EXECUTOR_CORES} \
+--conf spark.dynamicAllocation.enabled=true \
+--conf spark.yarn.executor.memoryOverhead=${YARN_OVERHEAD} \
+--conf spark.yarn.driver.memoryOverhead=${YARN_OVERHEAD} \
+--class com.azavea.ingest.geomesa.Main \
+${ASSEMBLY_URI} --help
+#csv \
+#-i gis -z ${GEOMESA_ZOOKEEPER} -u root \
+#-p secret -t geomesa.test -e plt -s , -d 6 \
+#--codec 'the_geom=point($$2,$$1),height=$$4,timestamp=date({yyyy-MM-ddHH:mm:ss},concat($$6,$$7))' \
+#--featurename trajectory \
+#geotrellis-sample-datasets geolife/000/Trajectory/

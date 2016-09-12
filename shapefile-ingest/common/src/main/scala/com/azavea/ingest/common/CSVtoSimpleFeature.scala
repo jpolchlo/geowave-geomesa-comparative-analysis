@@ -19,7 +19,11 @@ object CSVtoSimpleFeature {
     if (brMaybe.isFailure) {
       throw new java.io.IOException
     }
-    val iter = brMaybe.get.lines.iterator
+    val iter = new java.util.Iterator[String] { 
+      def next() = brMaybe.get.readLine 
+      def hasNext() = brMaybe.get.ready 
+      def remove() = throw new UnsupportedOperationException 
+    }
 
     for (i <- 0 until drop) { iter.next }
 

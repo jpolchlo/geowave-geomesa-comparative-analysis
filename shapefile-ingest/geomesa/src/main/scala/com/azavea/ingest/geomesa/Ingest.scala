@@ -1,16 +1,21 @@
 package com.azavea.ingest.geomesa
 
 import com.typesafe.scalalogging.Logger
+import com.vividsolutions.jts.geom.Geometry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
-import org.geotools.data.simple.SimpleFeatureStore
-import org.opengis.feature.simple._
-import org.geotools.feature.simple._
-import org.opengis.feature.`type`.Name
-import org.geotools.factory.Hints
-import org.geotools.filter.identity.FeatureIdImpl
 import org.geotools.data.{DataStoreFinder, DataUtilities, FeatureWriter, Transaction}
+import org.geotools.data.simple.SimpleFeatureStore
+import org.geotools.factory.Hints
+import org.geotools.feature.simple._
+import org.geotools.filter.identity.FeatureIdImpl
+import org.geotools.geometry.jts.JTS
+import org.geotools.referencing.CRS
+import org.geotools.referencing.operation.transform.AffineTransform2D
+import org.opengis.feature.simple._
+import org.opengis.feature.`type`.Name
 
+import java.io.File
 import java.util.HashMap
 import scala.collection.JavaConversions._
 
@@ -43,6 +48,10 @@ object Ingest {
                      s3bucket: String = "",
                      s3prefix: String = "",
                      csvExtension: String = ".csv",
+                     translate: Boolean = false, 
+                     origin: Array[Double] = Array(0.0, 0.0),
+                     numReplicates: Int = 0,
+                     centerFile: String = "",
                      unifySFT: Boolean = true) {
 
     def convertToJMap(): HashMap[String, String] = {
@@ -113,4 +122,42 @@ object Ingest {
         ds.dispose()
       }
     })
+
+  def shiftAndIngest(params: Params)(tuples: RDD[((Double, Double), SimpleFeature)]) = {
+    val oldCenter = params.origin
+    val exemplar = tuples.first._2
+
+    val origSFT = exemplar.getType
+    val origCRS = origSFT.getCoordinateReferenceSystem
+    val newCRS = CRS.decode("EPSG:4326")
+    val coordChange = CRS.findMathTransform(origCRS, newCRS, true)
+
+    val sftBuilder = new SimpleFeatureTypeBuilder
+    sftBuilder.setName(origSFT.getName)
+    sftBuilder.addAll(origSFT.getAttributeDescriptors)
+    origSFT.getUserData.map{case (k,v) => sftBuilder.userData(k,v)}
+    sftBuilder.setCRS(newCRS)
+    val newSFT = sftBuilder.buildFeatureType
+
+    val newRDD = tuples.mapPartitions(iter => iter.map { case (newCenter, feature) => {
+      val shift = new java.awt.geom.AffineTransform
+      shift.translate(newCenter._1 - oldCenter(0), newCenter._2 - oldCenter(1))
+
+      val geom = feature.getDefaultGeometry.asInstanceOf[Geometry]
+      val newGeom = JTS.transform(JTS.transform(geom, coordChange), new AffineTransform2D(shift))
+
+      val builder = new SimpleFeatureBuilder(newSFT)
+      newSFT.getAttributeDescriptors.foreach { attr => 
+        if (classOf[Geometry].isAssignableFrom(attr.getType.getBinding))
+          builder.add(newGeom)
+        else
+          builder.add(feature.getAttribute(attr.getName.toString))
+      }
+      builder.buildFeature(feature.getID)
+      }
+    }, true)
+
+    ingestRDD(params)(newRDD)
+  }
+
 }

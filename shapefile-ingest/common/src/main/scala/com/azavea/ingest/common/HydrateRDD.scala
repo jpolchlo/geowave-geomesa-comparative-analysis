@@ -35,10 +35,7 @@ object HydrateRDD {
       }).toArray
   }
 
-  def shpUrls2shpRdd(urlArray: Array[String]): RDD[SimpleFeature] = {
-    val sparkConf: SparkConf = (new SparkConf).setAppName("GeoMesa shapefile ingest")
-    val sc: SparkContext = new SparkContext(sparkConf)
-
+  def shpUrls2shpRdd(urlArray: Array[String])(implicit sc: SparkContext): RDD[SimpleFeature] = {
     val urlRdd: RDD[String] = sc.parallelize(urlArray)
     urlRdd.mapPartitions({ urlIter =>
       val urls = urlIter.toList
@@ -99,10 +96,7 @@ object HydrateRDD {
     schema: CSVSchemaParser.Expr,
     drop: Int,
     delim: String
-  ): RDD[SimpleFeature] = {
-    val sparkConf: SparkConf = (new SparkConf).setAppName("CSV Ingest")
-    val sc: SparkContext = new SparkContext(sparkConf)
-
+  )(implicit sc: SparkContext): RDD[SimpleFeature] = {
     val urlRdd: RDD[String] = sc.parallelize(urlArray, urlArray.size / 20)
     urlRdd.mapPartitions({ urlIter =>
       val urls = urlIter.toList
